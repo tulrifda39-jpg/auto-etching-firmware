@@ -45,11 +45,12 @@ void geserGambar(int dy) {
 }
 
 // ================= STATE LIST + ANIMASI =================
-#define L_UTAMA   0
-#define L_PRESET  1
-#define L_CFG     2
-#define L_AKSI    3
-#define JUMLAH_LIST 4
+#define L_UTAMA      0
+#define L_PRESET     1
+#define L_CFG        2
+#define L_AKSI       3
+#define L_KALIBRASI  4
+#define JUMLAH_LIST  5
 
 int           lsSel[JUMLAH_LIST]        = {0};
 float         lsPos[JUMLAH_LIST]        = {0};
@@ -442,6 +443,145 @@ void gambarLevel() {
   oled.setTextColor(WHITE);
 }
 
+// ================= HALAMAN: LEVEL CAIRAN (bar persentase) =================
+void gambarLevelCairan() {
+  gambarHeader("Level Cairan");
+
+  oled.setTextColor(WHITE);
+  oled.setTextSize(1);
+
+  int maxScroll = max(0, LEVEL_CAIRAN_CONTENT_H - (AREA_BAWAH - HEADER_H));
+  if (levelCairanScroll > maxScroll) levelCairanScroll = maxScroll;
+
+  int y = HEADER_H + 3 - levelCairanScroll;
+  for (int i = 0; i < JUMLAH_SENSOR; i++) {
+    if (terlihat(y, 7)) {
+      oled.setCursor(2, y);
+      oled.print(namaSensor[i]);
+
+      char buf[8];
+      sprintf(buf, "%d%%", levelPersen(i));
+      teksKanan(buf, SCREEN_WIDTH - 2, y);
+    }
+
+    int barY = y + 8;
+    int barH = 4;
+    int barW = SCREEN_WIDTH - 8;
+    if (terlihat(barY, barH)) {
+      oled.drawRect(4, barY, barW, barH, WHITE);
+      int pct = levelPersen(i);
+      int isi = barW * pct / 100;
+      if (isi > 0)
+        oled.fillRect(4, barY, isi, barH, WHITE);
+    }
+    y += LEVEL_CAIRAN_BLOCK_H;
+  }
+
+  gambarIndikatorScroll(levelCairanScroll, maxScroll);
+}
+
+// ================= HALAMAN: KALIBRASI (menu scroll) =================
+void gambarKalibrasi() {
+  gambarHeader("Kalibrasi");
+  gambarList(menuKalibrasi, JUMLAH_KALIBRASI, L_KALIBRASI, HEADER_H, 16);
+}
+
+// ================= HALAMAN: KALIBRASI PER ITEM =================
+void gambarKalibrasiDetail() {
+  gambarHeader(menuKalibrasi[kalibrasiItem]);
+
+  oled.setTextColor(WHITE);
+  oled.setTextSize(1);
+
+  int y = HEADER_H + 4;
+
+  switch (kalibrasiItem) {
+
+    case 1: {   // Sensor Suhu (DS18B20)
+      oled.setCursor(2, y); oled.print(F("Suhu:"));
+      char buf[16];
+      if (kalibrasiSuhuValid)
+        snprintf(buf, sizeof(buf), "%.2f C", kalibrasiSuhuC);
+      else
+        snprintf(buf, sizeof(buf), "NC");
+      teksKanan(buf, SCREEN_WIDTH - 2, y);
+      y += 10;
+      oled.setCursor(2, y); oled.print(F("ENTER: baca"));
+      y += 9;
+      break;
+    }
+
+    case 2: {   // Sensor Udara (MQ135)
+      int nilai = analogRead(PIN_MQ135);
+      oled.setCursor(2, y); oled.print(F("Analog:"));
+      char buf[12];
+      sprintf(buf, "%d", nilai);
+      teksKanan(buf, SCREEN_WIDTH - 2, y);
+      y += 10;
+      oled.setCursor(2, y); oled.print(F("Live MQ-135"));
+      y += 9;
+      break;
+    }
+
+    case 3:   // Motor HCL (stepper)
+    case 4:   // Motor H2O2
+    case 5: { // Motor Air
+      int idx = kalibrasiItem - 3;
+      oled.setCursor(2, y); oled.print(F("Stepper DRV8825"));
+      y += 9;
+      oled.setCursor(2, y); oled.print(pompaJalan[idx] ? "Status: JALAN" : "Status: BERHENTI");
+      y += 9;
+      oled.setCursor(2, y); oled.print(F("ENTER: jalan sebentar"));
+      y += 9;
+      oled.setCursor(2, y); oled.print(F("BACK: berhenti"));
+      y += 9;
+      break;
+    }
+
+    case 6:   // Motor Air Sabun (TB6612)
+    case 7: { // Motor Limbah
+      bool* on = (kalibrasiItem == 6) ? &kalibSabunOn : &kalibLimbahOn;
+      oled.setCursor(2, y); oled.print(F("DC TB6612"));
+      y += 9;
+      oled.setCursor(2, y); oled.print(*on ? "Status: ON" : "Status: OFF");
+      y += 9;
+      oled.setCursor(2, y); oled.print(F("ENTER: on/off"));
+      y += 9;
+      break;
+    }
+
+    case 8: { // Motor Agitasi (TB6612)
+      oled.setCursor(2, y); oled.print(F("Agitasi DC"));
+      y += 9;
+      oled.setCursor(2, y); oled.print(kalibAgitasiOn ? "Status: ON" : "Status: OFF");
+      y += 9;
+      oled.setCursor(2, y); oled.print(F("ENTER: on/off"));
+      y += 9;
+      break;
+    }
+
+    case 9: { // Exhaust Fan (TB6612)
+      oled.setCursor(2, y); oled.print(F("Exhaust Fan"));
+      y += 9;
+      oled.setCursor(2, y); oled.print(kalibFanOn ? "Status: ON" : "Status: OFF");
+      y += 9;
+      oled.setCursor(2, y); oled.print(F("ENTER: on/off"));
+      y += 9;
+      break;
+    }
+
+    default: {
+      teksTengah("Belum tersedia", 26, 1);
+      // TODO: implementasi kalibrasi untuk item ini.
+      y += 9;
+      break;
+    }
+  }
+
+  oled.setCursor(2, AREA_BAWAH - 9);
+  oled.print(F("[BACK] kembali"));
+}
+
 // ================= TOAST (pesan singkat) =================
 const char* toastTeks = "";
 bool toastAktif = false;
@@ -474,6 +614,9 @@ void gambarLayar() {
     case HAL_CFG_AKSI:      gambarCfgAksi();      break;
     case HAL_CFG_EDIT:      gambarCfgEdit();      break;
     case HAL_LEVEL:         gambarLevel();        break;
+    case HAL_LEVEL_CAIRAN:  gambarLevelCairan();  break;
+    case HAL_KALIBRASI:     gambarKalibrasi();    break;
+    case HAL_KALIBRASI_DETAIL: gambarKalibrasiDetail(); break;
   }
   // Overlay
   if (halaman == HAL_PROSES && dialogBatal)

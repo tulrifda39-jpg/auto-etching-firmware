@@ -29,12 +29,17 @@
 #include "data.h"
 #include "presetops.h"
 #include "sensor.h"
+#include <OneWire.h>
+#include <DallasTemperature.h>
 #include "storage.h"
 #include "buzzer.h"
 #include "process.h"
 #include "ui.h"
 
 unsigned long waktuRenderTerakhir = 0;
+
+OneWire ds18b20Wire(PIN_DS18B20);
+DallasTemperature ds18b20(&ds18b20Wire);
 
 #ifdef DEBUG_RENDER
 unsigned long dbgWaktu = 0;
@@ -87,8 +92,11 @@ void tanganiTombol(int t) {
           listReset(L_CFG);
           pindahHalaman(HAL_CFG_LIST);
         } else if (lsSel[L_UTAMA] == 2) {
-          levelMasuk();
-          pindahHalaman(HAL_LEVEL);
+          levelCairanScroll = 0;
+          pindahHalaman(HAL_LEVEL_CAIRAN);
+        } else if (lsSel[L_UTAMA] == 3) {
+          listReset(L_KALIBRASI);
+          pindahHalaman(HAL_KALIBRASI);
         } else {
           pindahHalaman(HAL_PLACEHOLDER);
         }
@@ -182,6 +190,88 @@ void tanganiTombol(int t) {
           if (ambangBerubah) dialogCfg = DLG_SIMPAN;
           else pindahHalaman(HAL_MENU_UTAMA);
         }
+      }
+      break;
+
+    // ---------- Level Cairan (bar persentase) ----------
+    case HAL_LEVEL_CAIRAN:
+      if (t == P_ATAS)  levelCairanScroll = max(0, levelCairanScroll - LEVEL_CAIRAN_STEP);
+      if (t == P_BAWAH) {
+        int mx = max(0, LEVEL_CAIRAN_CONTENT_H - (AREA_BAWAH - HEADER_H));
+        levelCairanScroll = min(mx, levelCairanScroll + LEVEL_CAIRAN_STEP);
+      }
+      if (t == P_BACK) pindahHalaman(HAL_MENU_UTAMA);
+      break;
+
+    // ---------- Kalibrasi: menu ----------
+    case HAL_KALIBRASI:
+      if (t == P_ATAS)  listGeser(L_KALIBRASI, -1, JUMLAH_KALIBRASI);
+      if (t == P_BAWAH) listGeser(L_KALIBRASI, +1, JUMLAH_KALIBRASI);
+      if (t == P_ENTER) {
+        int ki = lsSel[L_KALIBRASI];
+        if (ki == 0) {
+          levelMasuk();
+          pindahHalaman(HAL_LEVEL);
+        } else {
+          agitasiSet(0);
+          pompaSabunSet(false);
+          pompaLimbahSet(false);
+          fanSet(false);
+          pompaStopAll();
+          kalibSabunOn = false;
+          kalibLimbahOn = false;
+          kalibAgitasiOn = false;
+          kalibFanOn = false;
+          kalibrasiItem = ki;
+          pindahHalaman(HAL_KALIBRASI_DETAIL);
+        }
+      }
+      if (t == P_BACK) {
+        agitasiSet(0);
+        pompaSabunSet(false);
+        pompaLimbahSet(false);
+        fanSet(false);
+        pompaStopAll();
+        kalibSabunOn = false;
+        kalibLimbahOn = false;
+        kalibAgitasiOn = false;
+        kalibFanOn = false;
+        pindahHalaman(HAL_MENU_UTAMA);
+      }
+      break;
+
+    // ---------- Kalibrasi: per item ----------
+    case HAL_KALIBRASI_DETAIL:
+      if (t == P_ENTER) {
+        if (kalibrasiItem >= 3 && kalibrasiItem <= 5) {
+          int idx = kalibrasiItem - 3;
+          pompaMulai(idx, 1);
+        } else if (kalibrasiItem == 6) {
+          kalibSabunOn = !kalibSabunOn;
+          pompaSabunSet(kalibSabunOn);
+        } else if (kalibrasiItem == 7) {
+          kalibLimbahOn = !kalibLimbahOn;
+          pompaLimbahSet(kalibLimbahOn);
+        } else if (kalibrasiItem == 8) {
+          kalibAgitasiOn = !kalibAgitasiOn;
+          agitasiSet(kalibAgitasiOn ? 3 : 0);
+        } else if (kalibrasiItem == 9) {
+          kalibFanOn = !kalibFanOn;
+          fanSet(kalibFanOn);
+        }
+        perluGambar = true;
+      }
+      if (t == P_BACK) {
+        agitasiSet(0);
+        pompaSabunSet(false);
+        pompaLimbahSet(false);
+        fanSet(false);
+        pompaStopAll();
+        kalibSabunOn = false;
+        kalibLimbahOn = false;
+        kalibAgitasiOn = false;
+        kalibFanOn = false;
+        pindahHalaman(HAL_KALIBRASI);
       }
       break;
 
@@ -303,6 +393,9 @@ void setup() {
 
   motorInit();
   dcmotorInit();
+  ds18b20.begin();
+  ds18b20.setResolution(12);
+  ds18b20.setWaitForConversion(false);
   buzzerInit();
   pinMode(PIN_ESTOP, INPUT_PULLUP);
 
@@ -336,6 +429,27 @@ void loop() {
   sensorUpdate();                            // baca sensor level cairan
   buzzerUpdate();                            // pola nada non-blocking
 
+  // DS18B20: pembacaan non-blocking saat halaman kalibrasi suhu aktif
+  if (halaman == HAL_KALIBRASI_DETAIL && kalibrasiItem == 1) {
+    static unsigned long suhuReqMs = 0;
+    static bool suhuMenunggu = false;
+    unsigned long now = millis();
+    if (!suhuMenunggu || (now - suhuReqMs >= 1000)) {
+      ds18b20.requestTemperatures();
+      suhuReqMs = now;
+      suhuMenunggu = true;
+    } else if (suhuMenunggu && (now - suhuReqMs >= 900)) {
+      float tc = ds18b20.getTempCByIndex(0);
+      if (tc != DEVICE_DISCONNECTED_C) {
+        kalibrasiSuhuC = tc;
+        kalibrasiSuhuValid = true;
+      } else {
+        kalibrasiSuhuValid = false;
+      }
+      suhuMenunggu = false;
+    }
+  }
+
   // E-stop: hentikan semua aktuator & batalkan proses
   if (digitalRead(PIN_ESTOP) == LOW) {
     if (prosesJalan) {
@@ -347,6 +461,10 @@ void loop() {
     pompaSabunSet(false);
     fanSet(false);
     pompaStopAll();
+    kalibSabunOn = false;
+    kalibLimbahOn = false;
+    kalibAgitasiOn = false;
+    kalibFanOn = false;
   }
 
   bool animasiBerjalan = false;
@@ -386,6 +504,12 @@ void loop() {
     dbgWaktu = sekarang;
   }
 #endif
+
+  // Render periodik (live) untuk halaman Level Cairan & Kalibrasi Detail
+  if ((halaman == HAL_LEVEL_CAIRAN || halaman == HAL_KALIBRASI_DETAIL) &&
+      (millis() - waktuRenderTerakhir >= 200)) {
+    perluGambar = true;
+  }
 
   delay(2);
 }

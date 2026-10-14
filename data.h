@@ -42,6 +42,20 @@ const char* menuUtama[JUMLAH_MENU] = {
   "Kalibrasi"
 };
 
+#define JUMLAH_KALIBRASI 10
+const char* menuKalibrasi[JUMLAH_KALIBRASI] = {
+  "Sensor Level",
+  "Sensor Suhu",
+  "Sensor Udara",
+  "Motor HCL",
+  "Motor H2O2",
+  "Motor Air",
+  "Motor Air Sabun",
+  "Motor Limbah",
+  "Motor Agitasi",
+  "Exhaust Fan"
+};
+
 // ================= HALAMAN & STATE =================
 enum Halaman {
   HAL_MENU_UTAMA,
@@ -52,11 +66,15 @@ enum Halaman {
   HAL_CFG_LIST,
   HAL_CFG_AKSI,
   HAL_CFG_EDIT,
-  HAL_LEVEL
+  HAL_LEVEL,            // uji touch sensor level (kalibrasi)
+  HAL_LEVEL_CAIRAN,     // halaman Level Cairan (bar persentase)
+  HAL_KALIBRASI,        // menu Kalibrasi (scroll)
+  HAL_KALIBRASI_DETAIL  // halaman kalibrasi per item
 };
 const char* namaHalaman[] = {
   "MENU_UTAMA", "PRESET_LIST", "PRESET_DETAIL", "PROSES", "PLACEHOLDER",
-  "CFG_LIST", "CFG_AKSI", "CFG_EDIT", "LEVEL"
+  "CFG_LIST", "CFG_AKSI", "CFG_EDIT", "LEVEL", "LEVEL_CAIRAN",
+  "KALIBRASI", "KALIBRASI_DETAIL"
 };
 
 Halaman halaman = HAL_MENU_UTAMA;
@@ -69,6 +87,25 @@ bool perluGambar = true;
 int presetDetailScroll = 0;
 const int DETAIL_SCROLL_STEP = 5;
 const int DETAIL_CONTENT_H   = 90;   // tinggi total konten (virtual)
+
+// State Level Cairan (bar persentase)
+int levelCairanScroll = 0;
+const int LEVEL_CAIRAN_STEP    = 5;
+const int LEVEL_CAIRAN_BLOCK_H = 14;
+const int LEVEL_CAIRAN_CONTENT_H = JUMLAH_SENSOR * LEVEL_CAIRAN_BLOCK_H;
+
+// State menu Kalibrasi
+int kalibrasiItem = 0;
+
+// State kalibrasi sensor suhu (DS18B20)
+float kalibrasiSuhuC = 0.0;
+bool  kalibrasiSuhuValid = false;
+
+// State kalibrasi aktuator DC (TB6612)
+bool kalibSabunOn   = false;
+bool kalibLimbahOn  = false;
+bool kalibAgitasiOn = false;
+bool kalibFanOn     = false;
 
 // State Konfigurasi Preset
 enum DialogCfg { DLG_NONE, DLG_SIMPAN, DLG_HAPUS };

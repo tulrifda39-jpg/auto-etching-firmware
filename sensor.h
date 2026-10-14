@@ -192,7 +192,7 @@ void sensorUpdate() {
     berubah = true;
   }
   sensorLogPeriodik();
-  if (berubah && halaman == HAL_LEVEL) perluGambar = true;
+  if (berubah && (halaman == HAL_LEVEL || halaman == HAL_LEVEL_CAIRAN)) perluGambar = true;
 }
 
 // ----- helper halaman Level Cairan (mode uji) -----
@@ -205,3 +205,10 @@ void levelSetAmbangDariNilai(int i) {
 }
 
 void levelUbahAmbang(int i, int arah) {}
+
+// Persentase level cairan per kanal (0..JUMLAH_SENSOR-1).
+// TODO: sensor sekarang hanya touch ON/OFF, jadi 100% saat terdeteksi, 0% saat tidak.
+int levelPersen(int i) {
+  if (i < 0 || i >= JUMLAH_SENSOR) return 0;
+  return sensorAktif[i] ? 100 : 0;
+}
