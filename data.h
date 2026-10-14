@@ -69,12 +69,16 @@ enum Halaman {
   HAL_LEVEL,            // uji touch sensor level (kalibrasi)
   HAL_LEVEL_CAIRAN,     // halaman Level Cairan (bar persentase)
   HAL_KALIBRASI,        // menu Kalibrasi (scroll)
-  HAL_KALIBRASI_DETAIL  // halaman kalibrasi per item
+  HAL_KALIBRASI_DETAIL, // halaman kalibrasi per item
+  HAL_KALIB_MAIN,       // (upstream) daftar sensor untuk dikalibrasi
+  HAL_KALIB_LEVEL,      // (upstream) halaman kalibrasi level per sensor
+  HAL_KALIB_LEVEL_SET   // (upstream) set 0%/100%
 };
 const char* namaHalaman[] = {
   "MENU_UTAMA", "PRESET_LIST", "PRESET_DETAIL", "PROSES", "PLACEHOLDER",
   "CFG_LIST", "CFG_AKSI", "CFG_EDIT", "LEVEL", "LEVEL_CAIRAN",
-  "KALIBRASI", "KALIBRASI_DETAIL"
+  "KALIBRASI", "KALIBRASI_DETAIL",
+  "KALIB_MAIN", "KALIB_LEVEL", "KALIB_LEVEL_SET"
 };
 
 Halaman halaman = HAL_MENU_UTAMA;
@@ -88,6 +92,7 @@ int presetDetailScroll = 0;
 const int DETAIL_SCROLL_STEP = 5;
 const int DETAIL_CONTENT_H   = 90;   // tinggi total konten (virtual)
 
+// ---- State dari fork lokal ----
 // State Level Cairan (bar persentase)
 int levelCairanScroll = 0;
 const int LEVEL_CAIRAN_STEP    = 5;
@@ -106,6 +111,17 @@ bool kalibSabunOn   = false;
 bool kalibLimbahOn  = false;
 bool kalibAgitasiOn = false;
 bool kalibFanOn     = false;
+
+// ---- State dari upstream ----
+// State scroll Level Cairan
+int levelScroll = 0;
+const int LEVEL_SCROLL_STEP = 5;
+
+// State Kalibrasi
+int kalibSensorIdx = 0;       // sensor yang sedang dikalibrasi
+int kalibStep = 0;            // 0 = pilih cairan, 1 = set 0%, 2 = set 100%
+int kalibSetStep = 0;         // 0 = pilih 0%/100%, 1 = set 0%, 2 = set 100%
+int kalibLevelScroll = 0;     // scroll offset untuk halaman pilih cairan
 
 // State Konfigurasi Preset
 enum DialogCfg { DLG_NONE, DLG_SIMPAN, DLG_HAPUS };

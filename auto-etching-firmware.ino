@@ -98,7 +98,8 @@ void tanganiTombol(int t) {
           listReset(L_KALIBRASI);
           pindahHalaman(HAL_KALIBRASI);
         } else {
-          pindahHalaman(HAL_PLACEHOLDER);
+          listReset(L_AKSI);
+          pindahHalaman(HAL_KALIB_MAIN);
         }
       }
       break;
@@ -154,41 +155,85 @@ void tanganiTombol(int t) {
 
     // ---------- Level Cairan ----------
     case HAL_LEVEL:
-      if (dialogCfg == DLG_SIMPAN) {
-        if (t == P_ENTER) {
-          dialogCfg = DLG_NONE;
-          ambangBerubah = false;
-          pindahHalaman(HAL_MENU_UTAMA);
-          tampilToast(simpanAmbang() ? "Ambang tersimpan" : "Gagal simpan!");
-        } else if (t == P_BACK) {
-          dbg.println(F("[LEVEL] Perubahan ambang dibuang"));
-          dialogCfg = DLG_NONE;
-          levelBuang();
-          pindahHalaman(HAL_MENU_UTAMA);
+      if (t == P_ATAS) {
+        levelScroll = max(0, levelScroll - LEVEL_SCROLL_STEP);
+        dbg.println(F("[LEVEL] Scroll up"));
+      }
+      if (t == P_BAWAH) {
+        levelScroll += LEVEL_SCROLL_STEP;
+        dbg.println(F("[LEVEL] Scroll down"));
+      }
+      if (t == P_BACK) {
+        levelScroll = 0;
+        pindahHalaman(HAL_MENU_UTAMA);
+      }
+      break;
+
+    // ---------- Kalibrasi Main ----------
+    case HAL_KALIB_MAIN:
+      if (t == P_ATAS)  listGeser(L_AKSI, -1, JUMLAH_MENU_KALIB);
+      if (t == P_BAWAH) listGeser(L_AKSI, +1, JUMLAH_MENU_KALIB);
+      if (t == P_ENTER) {
+        int a = lsSel[L_AKSI];
+        if (a == 1) {
+          // Sensor Level
+          kalibSensorIdx = 0;
+          kalibSetStep = 0;
+          pindahHalaman(HAL_KALIB_LEVEL);
+        } else {
+          tampilToast("Belum tersedia");
         }
-      } else {
-        if (t == P_ATAS)  levelSel = max(0, levelSel - 1);
-        if (t == P_BAWAH) levelSel = min(JUMLAH_SENSOR - 1, levelSel + 1);
-        if (sensorOk) {
-          if (t == P_KIRI) {
-            // kalibrasi ulang: wadah harus kosong/kering saat ENTER berikutnya
-            for (int i = 0; i < JUMLAH_SENSOR; i++) {
-              sensorBaseline[i] = 0;
-              sensorAktif[i] = false;
-              sensorCnt[i] = 0;
-            }
-            sensorKalibrasi = true;
-            tampilToast("Kalibrasi ulang");
-          }
-          if (t == P_KANAN) dbg.println(F("[TOUCH] Kanan tidak dipakai (mode uji)"));
-          if (t == P_ENTER) {
-            for (int i = 0; i < JUMLAH_SENSOR; i++) sensorSentuh[i] = 0;
-            tampilToast("Counter direset");
-          }
-        }
-        if (t == P_BACK) {
-          if (ambangBerubah) dialogCfg = DLG_SIMPAN;
-          else pindahHalaman(HAL_MENU_UTAMA);
+      }
+      if (t == P_BACK) pindahHalaman(HAL_MENU_UTAMA);
+      break;
+
+    // ---------- Kalibrasi Sensor Level: Pilih Cairan ----------
+    case HAL_KALIB_LEVEL: {
+      const int ROW_H = 10;
+      const int VISIBLE = (AREA_BAWAH - HEADER_H) / ROW_H;
+      int maxScroll = max(0, JUMLAH_SENSOR - VISIBLE);
+      if (t == P_ATAS) {
+        kalibSensorIdx = max(0, kalibSensorIdx - 1);
+        if (kalibSensorIdx < kalibLevelScroll) kalibLevelScroll = kalibSensorIdx;
+      }
+      if (t == P_BAWAH) {
+        kalibSensorIdx = min(JUMLAH_SENSOR - 1, kalibSensorIdx + 1);
+        if (kalibSensorIdx >= kalibLevelScroll + VISIBLE) kalibLevelScroll = kalibSensorIdx - VISIBLE + 1;
+      }
+      if (t == P_ENTER) {
+        kalibSetStep = 0;
+        pindahHalaman(HAL_KALIB_LEVEL_SET);
+      }
+      if (t == P_BACK) {
+        kalibLevelScroll = 0;
+        pindahHalaman(HAL_KALIB_MAIN);
+      }
+      break;
+    }
+
+    // ---------- Kalibrasi Sensor Level: Set 0% / 100% ----------
+    case HAL_KALIB_LEVEL_SET:
+      if (t == P_BACK) {
+        pindahHalaman(HAL_KALIB_LEVEL);
+        break;
+      }
+      if (t == P_ATAS || t == P_BAWAH) {
+        kalibSetStep = 1 - kalibSetStep;
+        break;
+      }
+      if (t == P_ENTER) {
+        if (kalibSetStep == 0) {
+          sensorSetKosong(kalibSensorIdx);
+          dbg.print(F("[KALIB] 0% tersimpan: "));
+          dbg.println(sensorKalibKosong[kalibSensorIdx]);
+          tampilToast("0% tersimpan");
+        } else {
+          sensorSetPenuh(kalibSensorIdx);
+          simpanKalib();
+          dbg.print(F("[KALIB] 100% tersimpan: "));
+          dbg.println(sensorKalibPenuh[kalibSensorIdx]);
+          tampilToast("100% tersimpan");
+          pindahHalaman(HAL_KALIB_LEVEL);
         }
       }
       break;
@@ -379,7 +424,7 @@ void setup() {
   dbg.println(F(FW_VERSI));
 
   muatPreset();
-  muatAmbang();
+  muatKalib();
 
   Wire.begin(SDA_PIN, SCL_PIN);
   Wire.setClock(I2C_CLOCK);

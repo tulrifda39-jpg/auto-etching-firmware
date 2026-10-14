@@ -3,21 +3,21 @@
 #include "config.h"
 #include "data.h"
 #include "presetops.h"
+#include "sensor.h"
 
 // Semua preset disimpan sebagai SATU blob (satu key) + versi + checksum.
-// Satu tulisan = lebih aman kalau daya putus saat menyimpan.
 #define FORMAT_VERSI 1
 
 struct DataSimpan {
   uint32_t versi;
   uint32_t jumlah;
   Preset   p[MAKS_PRESET];
-  uint32_t crc;          // harus field terakhir
+  uint32_t crc;
 };
 
 Preferences prefs;
 
-uint32_t hitungCrc(const uint8_t* d, size_t n) {   // FNV-1a 32-bit
+uint32_t hitungCrc(const uint8_t* d, size_t n) {
   uint32_t h = 2166136261UL;
   for (size_t i = 0; i < n; i++) { h ^= d[i]; h *= 16777619UL; }
   return h;
@@ -74,44 +74,51 @@ void muatPreset() {
   }
 }
 
-// ================= AMBANG SENSOR LEVEL =================
-#define FORMAT_VERSI_AMBANG 1
+// ================= KALIBRASI SENSOR LEVEL =================
+#define FORMAT_VERSI_KALIB 1
 
-struct DataAmbang {
+struct DataKalib {
   uint32_t versi;
-  int32_t  ambang[JUMLAH_SENSOR];
-  uint32_t crc;          // harus field terakhir
+  int32_t  kosong[JUMLAH_SENSOR];
+  int32_t  penuh[JUMLAH_SENSOR];
+  uint32_t crc;
 };
 
-bool simpanAmbang() {
-  DataAmbang d;
+bool simpanKalib() {
+  DataKalib d;
   memset(&d, 0, sizeof(d));
-  d.versi = FORMAT_VERSI_AMBANG;
-  for (int i = 0; i < JUMLAH_SENSOR; i++) d.ambang[i] = ambang[i];
+  d.versi = FORMAT_VERSI_KALIB;
+  for (int i = 0; i < JUMLAH_SENSOR; i++) {
+    d.kosong[i] = sensorKalibKosong[i];
+    d.penuh[i]  = sensorKalibPenuh[i];
+  }
   d.crc = hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc));
 
   bool ok = false;
   if (prefs.begin(PREF_NS, false)) {
-    ok = (prefs.putBytes("amb", &d, sizeof(d)) == sizeof(d));
+    ok = (prefs.putBytes("kal", &d, sizeof(d)) == sizeof(d));
     prefs.end();
   }
-  dbg.println(ok ? F("[STORE] Simpan ambang: OK") : F("[STORE] Simpan ambang: GAGAL"));
+  dbg.println(ok ? F("[STORE] Simpan kalibrasi: OK") : F("[STORE] Simpan kalibrasi: GAGAL"));
   return ok;
 }
 
-void muatAmbang() {
-  DataAmbang d;
+void muatKalib() {
+  DataKalib d;
   bool valid = false;
   if (prefs.begin(PREF_NS, false)) {
-    if (prefs.getBytesLength("amb") == sizeof(d)) {
-      prefs.getBytes("amb", &d, sizeof(d));
-      valid = (d.versi == FORMAT_VERSI_AMBANG) &&
+    if (prefs.getBytesLength("kal") == sizeof(d)) {
+      prefs.getBytes("kal", &d, sizeof(d));
+      valid = (d.versi == FORMAT_VERSI_KALIB) &&
               (d.crc == hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc)));
       for (int i = 0; valid && i < JUMLAH_SENSOR; i++)
-        if (d.ambang[i] < 0 || d.ambang[i] > 1023) valid = false;
+        if (d.kosong[i] <= 0 || d.penuh[i] <= 0 || d.penuh[i] <= d.kosong[i]) valid = false;
     }
     prefs.end();
   }
-  for (int i = 0; i < JUMLAH_SENSOR; i++) ambang[i] = valid ? d.ambang[i] : 0;
-  dbg.println(valid ? F("[STORE] Ambang dimuat") : F("[STORE] Ambang belum ada (0 = belum diatur)"));
+  for (int i = 0; i < JUMLAH_SENSOR; i++) {
+    sensorKalibKosong[i] = valid ? d.kosong[i] : 113000;
+    sensorKalibPenuh[i]  = valid ? d.penuh[i]  : 156000;
+  }
+  dbg.println(valid ? F("[STORE] Kalibrasi dimuat") : F("[STORE] Kalibrasi belum ada (default)"));
 }

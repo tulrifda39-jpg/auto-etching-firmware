@@ -409,9 +409,11 @@ void gambarCfgEdit() {
   oled.fillRect(SCREEN_WIDTH - 2, thumbY, 2, thumbH, WHITE);
 }
 
-// ================= HALAMAN: LEVEL CAIRAN (uji touch) =================
+// ================= HALAMAN: LEVEL CAIRAN =================
+// Layout: nama (kiri) + persen (kanan) + bar progres di bawah.
+// Scroll tanpa cursor, seperti preset detail.
 void gambarLevel() {
-  gambarHeader(sensorKalibrasi ? "Uji Touch (kalibrasi)" : "Uji Touch Level");
+  gambarHeader("Level Cairan");
 
   if (!sensorOk) {
     teksTengah("Sensor tidak", 22, 1);
@@ -420,27 +422,125 @@ void gambarLevel() {
     return;
   }
 
+  const int ROW_H = 18;
+  const int CONTENT_H = JUMLAH_SENSOR * ROW_H + 4;
+  int maxScroll = max(0, CONTENT_H - (AREA_BAWAH - HEADER_H));
+  if (levelScroll > maxScroll) levelScroll = maxScroll;
+
+  int y = HEADER_H + 2 - levelScroll;
+  const int barX = 1;
+  const int barW = SCREEN_WIDTH - 2;
+  const int barH = 6;
+
   oled.setTextSize(1);
   for (int i = 0; i < JUMLAH_SENSOR; i++) {
-    int y = HEADER_H + 1 + i * 7;
-    bool sel = (i == levelSel);
-    if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 7, WHITE);
-    oled.setTextColor(sel ? BLACK : WHITE);
+    if (y + ROW_H < HEADER_H || y > AREA_BAWAH) { y += ROW_H; continue; }
+
+    oled.setTextColor(WHITE);
     oled.setCursor(1, y);
     oled.print(namaSensor[i]);
 
     char buf[12];
-    sprintf(buf, "P%d", sensorPin[i]);
-    teksKanan(buf, 42, y);
-    sprintf(buf, "%d", sensorRaw[i]);
-    teksKanan(buf, 64, y);
-    sprintf(buf, "d%d", sensorDelta[i]);
-    teksKanan(buf, 88, y);
-    teksKanan(sensorAktif[i] ? "AKTIF" : (sensorKalibrasi ? "KALIB" : "-"), 104, y);
-    sprintf(buf, "%lu", sensorSentuh[i]);
-    teksKanan(buf, 127, y);
+    sprintf(buf, "%d%%", sensorPersen[i]);
+    teksKanan(buf, SCREEN_WIDTH - 1, y);
+
+    int barY = y + 9;
+    oled.drawRect(barX, barY, barW, barH, WHITE);
+    int isi = (barW - 2) * sensorPersen[i] / 100;
+    if (isi > 0) oled.fillRect(barX + 1, barY + 1, isi, barH - 2, WHITE);
+
+    y += ROW_H;
+  }
+
+  if (maxScroll > 0) {
+    const int x = SCREEN_WIDTH - 4;
+    if (levelScroll > 0) {
+      oled.fillTriangle(x - 2, HEADER_H + 3, x + 2, HEADER_H + 3, x, HEADER_H + 1, WHITE);
+    }
+    if (levelScroll < maxScroll) {
+      oled.fillTriangle(x - 2, AREA_BAWAH - 3, x + 2, AREA_BAWAH - 3, x, AREA_BAWAH - 1, WHITE);
+    }
+  }
+}
+
+// ================= HALAMAN: KALIBRASI MAIN =================
+const char* const menuKalib[] = { "Pompa", "Sensor Level", "Sensor Suhu", "Sensor Udara" };
+const int JUMLAH_MENU_KALIB = 4;
+
+void gambarKalibMain() {
+  gambarHeader("Kalibrasi");
+  const char* item[JUMLAH_MENU_KALIB];
+  for (int i = 0; i < JUMLAH_MENU_KALIB; i++) item[i] = menuKalib[i];
+  gambarList(item, JUMLAH_MENU_KALIB, L_AKSI, HEADER_H, 16);
+}
+
+// ================= HALAMAN: KALIBRASI SENSOR LEVEL =================
+void gambarKalibLevel() {
+  gambarHeader("Sensor Level");
+
+  const int ROW_H = 10;
+  const int VISIBLE = (AREA_BAWAH - HEADER_H) / ROW_H;
+  int maxScroll = max(0, JUMLAH_SENSOR - VISIBLE);
+  if (kalibLevelScroll > maxScroll) kalibLevelScroll = maxScroll;
+
+  oled.setTextSize(1);
+  oled.setTextColor(WHITE);
+  for (int i = 0; i < JUMLAH_SENSOR; i++) {
+    int y = HEADER_H + 2 + (i - kalibLevelScroll) * ROW_H;
+    if (y < HEADER_H - 1 || y > AREA_BAWAH) continue;
+    bool sel = (i == kalibSensorIdx);
+    if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 9, WHITE);
+    oled.setTextColor(sel ? BLACK : WHITE);
+    oled.setCursor(2, y);
+    oled.print(namaSensor[i]);
   }
   oled.setTextColor(WHITE);
+
+  // Indikator scroll
+  if (maxScroll > 0) {
+    const int x = SCREEN_WIDTH - 4;
+    if (kalibLevelScroll > 0) {
+      oled.fillTriangle(x - 2, HEADER_H + 3, x + 2, HEADER_H + 3, x, HEADER_H + 1, WHITE);
+    }
+    if (kalibLevelScroll < maxScroll) {
+      oled.fillTriangle(x - 2, AREA_BAWAH - 3, x + 2, AREA_BAWAH - 3, x, AREA_BAWAH - 1, WHITE);
+    }
+  }
+}
+
+// ================= HALAMAN: SET 0% / 100% =================
+void gambarKalibLevelSet() {
+  gambarHeader(namaSensor[kalibSensorIdx]);
+
+  oled.setTextSize(1);
+  oled.setTextColor(WHITE);
+
+  int y = HEADER_H + 4;
+  // 0%
+  bool sel0 = (kalibSetStep == 0);
+  if (sel0) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+  oled.setTextColor(sel0 ? BLACK : WHITE);
+  oled.setCursor(2, y);
+  oled.print(F("0%"));
+  char buf[16];
+  sprintf(buf, "= %d", sensorKalibKosong[kalibSensorIdx]);
+  teksKanan(buf, SCREEN_WIDTH - 2, y);
+  y += 12;
+
+  // 100%
+  bool sel100 = (kalibSetStep == 1);
+  if (sel100) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+  oled.setTextColor(sel100 ? BLACK : WHITE);
+  oled.setCursor(2, y);
+  oled.print(F("100%"));
+  sprintf(buf, "= %d", sensorKalibPenuh[kalibSensorIdx]);
+  teksKanan(buf, SCREEN_WIDTH - 2, y);
+  y += 14;
+
+  // Raw value live
+  oled.setTextColor(WHITE);
+  sprintf(buf, "Raw: %d", sensorRaw[kalibSensorIdx]);
+  teksTengah(buf, y, 1);
 }
 
 // ================= HALAMAN: LEVEL CAIRAN (bar persentase) =================
@@ -617,6 +717,9 @@ void gambarLayar() {
     case HAL_LEVEL_CAIRAN:  gambarLevelCairan();  break;
     case HAL_KALIBRASI:     gambarKalibrasi();    break;
     case HAL_KALIBRASI_DETAIL: gambarKalibrasiDetail(); break;
+    case HAL_KALIB_MAIN:    gambarKalibMain();    break;
+    case HAL_KALIB_LEVEL:   gambarKalibLevel();   break;
+    case HAL_KALIB_LEVEL_SET: gambarKalibLevelSet(); break;
   }
   // Overlay
   if (halaman == HAL_PROSES && dialogBatal)
